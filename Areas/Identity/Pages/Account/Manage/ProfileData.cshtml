@@ -1,0 +1,106 @@
+﻿@page
+@model ProfileDataModel
+@{
+    ViewData["Title"] = "Анкета пользователя";
+    ViewData["ActivePage"] = ManageNavPages.ProfileData;
+}
+
+<h3>@ViewData["Title"]</h3>
+<partial name="_StatusMessage" for="StatusMessage" />
+<div class="row">
+    <div class="col-md-6">
+        <form id="email-form" method="post">
+            <div asp-validation-summary="All" class="text-danger"></div>
+            <div class="form-floating">
+                <input asp-for="Input.Nic" class="form-control" aria-required="true" placeholder="Ник - как Вас называют" />
+                <label asp-for="Input.Nic" class="form-label">Ник</label>
+                <span asp-validation-for="Input.Nic" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <input asp-for="Input.Name" class="form-control" aria-required="true" placeholder="Имя" />
+                <label asp-for="Input.Name" class="form-label">Имя</label>
+                <span asp-validation-for="Input.Name" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <input asp-for="Input.MiddleName" class="form-control" aria-required="true" placeholder="Отчество" />
+                <label asp-for="Input.MiddleName" class="form-label">Отчество</label>
+                <span asp-validation-for="Input.MiddleName" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <input asp-for="Input.Surname" class="form-control" aria-required="true" placeholder="Фамилия" />
+                <label asp-for="Input.Surname" class="form-label">Фамилия</label>
+                <span asp-validation-for="Input.Surname" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <input asp-for="Input.Contacts" class="form-control" aria-required="true" placeholder="Контакты" />
+                <label asp-for="Input.Contacts" class="form-label">Контакты</label>
+                <span asp-validation-for="Input.Contacts" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <textarea asp-for="Input.AboutMe" class="form-control" aria-required="true" placeholder="Расскажите о себе" style="height: 80px;"></textarea>
+                <label asp-for="Input.AboutMe" class="form-label">О себе</label>
+                <span asp-validation-for="Input.AboutMe" class="text-danger"></span>
+            </div>
+            <div class="form-floating">
+                <textarea asp-for="Input.Tags" class="form-control" aria-required="true" placeholder="Личные теги - непрофессиональные" style="height: 80px;"></textarea>
+                <label asp-for="Input.Tags" class="form-label">Теги</label>
+                <span asp-validation-for="Input.Tags" class="text-danger"></span>
+            </div>
+            <div>
+                <div class="form-check form-switch">
+                    <label asp-for="Input.Gender" class="form-label">
+                        <input type="checkbox" class="form-check-input" role="switch" asp-for="Input.Gender" />
+                        пол
+                    </label>
+                </div>
+                <div class="form-check form-switch">
+                    <label asp-for="Input.Private" class="form-label">
+                        <input type="checkbox" class="form-check-input" role="switch" asp-for="Input.Private" />
+                        закрытый профиль
+                    </label>
+                </div>
+                <div class="form-check form-switch">
+                    <label asp-for="Input.Moderation" class="form-label">
+                        <input type="checkbox" class="form-check-input" role="switch" asp-for="Input.Moderation" />
+                        Модерация успешная
+                    </label>
+                </div>
+                <a href="#" class="btn btn-link  btn-sm" data-bs-toggle="modal" data-bs-target="#competenciesModal"><i class="bi bi-mortarboard-fill"></i> Мои компетенции</a>
+            </div>
+            <button id="change-email-button" type="submit" asp-page-handler="SaveProfile" class="w-100 btn btn-lg btn-primary">Сохранить</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div class="modal fade" id="competenciesModal" tabindex="-1" aria-labelledby="competenciesModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="competenciesModalLabel">Компетенции</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                @foreach (var item in Model?.Input?.Competencies)
+                {
+                    <p>@item.Profession</p>
+                    <p>@item.Specialist</p>
+                    <p>@item.Tags</p>
+                    <hr />
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary">назад</button>
+                <button type="button" class="btn btn-secondary">вперёд</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-danger">Удалить компетенцию</button>
+                <button type="button" class="btn btn-success">Добавить компетенцию</button>
+                <button type="button" class="btn btn-primary">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
