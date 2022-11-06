@@ -1,0 +1,52 @@
+﻿@using indeas.Data
+@inject ThemesList Themes
+@inject CTheme ctheme
+@inherits LayoutComponentBase
+
+<PageTitle>indeas</PageTitle>
+
+@{
+    
+}
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 auth">
+            <LoginDisplay />
+            <select class="form-select w-25" @onchange=GetThemes><option title="Исходный Bootstrap" value="">По умолчанию</option><option value="0" title="Спокойное голубое небо">Лазурный</option><option value="1" title="Ода метро">Космо</option><option value="2" title="Черный как смоль и электрический синий">Киборг</option><option value="3" title="Категорически в ночном режиме">Мрачно</option><option value="4" title="Плоский и современный">Плоско</option><option value="5" title="Хрустящий, как новый лист бумаги">Журнал</option><option value="6" title="Носитель - это сообщение">Литера</option><option value="7" title="Свет и тень">Просвет</option><option value="8" title="Нотка класса">Люкс</option><option value="9" title="Материал - это метафора">Материя</option><option value="10" title="Свежее ощущение">Мятный</option><option value="11" title="Неуморфный слой">Превращаться</option><option value="12" title="След пурпурного">Пульс</option><option value="13" title="Стекломорфный слой">Кварц</option><option value="14" title="Прикосновение тепла">Песчаник</option><option value="15" title="Мини и минималистичный">Симплекс</option><option value="16" title="Нарисованный от руки образ для макетов и веселья">Схематичный</option><option value="17" title="Оттенки серого оружейного металла">Шифер</option><option value="18" title="Вращение на солнечной энергии">Солнечный</option><option value="19" title="Серебристый и гладкий">Космическая лаборатория</option><option value="20" title="Храбрый и синий">Супергерой</option><option value="21" title="Ubuntu оранжевый и уникальный шрифт">Объединенный</option><option value="22" title="Эстетика киберпанка">Пар</option><option value="23" title="Дружественный фонд">Йети</option><option value="24" title="Свежий и красивый">Зефир</option></select>
+            @*<a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>*@
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    [Inject]
+    NavigationManager navigation { get; set; }
+    private string? current = null;
+    private async Task GetThemes(ChangeEventArgs eventArgs)
+    {
+        if (eventArgs.Value == "") ctheme.CurrentTheme = "https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css";
+        else
+        {
+            int i = int.Parse(eventArgs.Value.ToString());
+            ctheme.CurrentTheme = (new ThemesList()).themes[i].cssMin;
+        }
+        navigation.NavigateTo(navigation.Uri.Split('/').Last(), true);
+    }
+    private async Task SetThemes(EventArgs eventArgs)
+    {
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        current = Themes.themes.IndexOf(Themes.themes.FirstOrDefault(t => t.cssMin == ctheme.CurrentTheme)).ToString();
+        if (current == null) current = "";
+    }
+}

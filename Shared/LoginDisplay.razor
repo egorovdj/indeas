@@ -1,0 +1,59 @@
+﻿@using Microsoft.EntityFrameworkCore
+@inject NavigationManager NavManager
+
+<AuthorizeView>
+    <Authorized>
+        <a class="nav-link text-white col-2" data-bs-toggle="offcanvas" href="#offcanvasFilter" role="button" aria-controls="offcanvasFilter" title="Показать фильтр"><i class="bi bi-funnel fs-1"></i></a>
+        <a class="nav-link text-white col-4" href="Identity/Account/Manage">@context.User.Identity?.Name</a>
+        <form method="post" class="col-2" action="Identity/Account/LogOut">
+            <button type="submit" class="nav-link btn btn-link text-white">Выйти</button>
+        </form>
+    </Authorized>
+    <NotAuthorized>
+        <a class="nav-link text-white col-2" href="Identity/Account/Register">Регистрация</a>
+        <a class="nav-link text-white col-2" href="Identity/Account/Login">Вход</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@*@code {
+    [Inject]
+    NavigationManager navigation { get; set; }
+    private bool collapseFilter = true;
+
+    [Parameter]
+    public string? FilterCssClass { get; set; }
+    [Parameter]
+    public static string? location { get; set; } = "";
+    [Parameter]
+    public static int? categoryId { get; set; }
+
+    private Models.PlatformData db = new Models.PlatformData();
+    private IQueryable<Models.Category> categories;
+
+    public class ideasFilter
+    {
+        public int Category { get; set; }
+    }
+
+    private void GetCategory(ChangeEventArgs eventArgs)
+    {
+        categoryId = int.Parse(eventArgs.Value.ToString());
+        navigation.NavigateTo(navigation.Uri.Split('/').Last(), true);
+        StateHasChanged();
+    }
+
+    private void OnIdeasFilter(EventArgs eventArgs)
+    {
+        //StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = db.Categories.Include(c => c.InverseSeniorNavigation).Where(c => c.Senior == null);
+        location = navigation.Uri.Split('/').Last();
+        navigation.LocationChanged += (nm, l) =>
+        {
+            location = l.Location.Split('/').Last();
+        };
+    }
+}*@

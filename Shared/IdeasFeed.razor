@@ -1,0 +1,376 @@
+﻿@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AuthenticationStateProvider AStateProvider
+@inject NavigationManager NavManager
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+
+<h3 class="text-white">Лента идей</h3>
+
+@foreach (var idea in ((new Models.PlatformData()).Ideas.Include(i => i.Authors).ThenInclude(a => a.Author1Navigation.User).Where(i => (ideasFilter.Category == null ? true : i.Category == ideasFilter.Category) && (ideasFilter.Moderation == null ? true : ideasFilter.Moderation == i.Moderation) && (ideasFilter.Innovative == null ? true : ideasFilter.Innovative == i.Innovative) && (ideasFilter.Promising == null ? true : ideasFilter.Promising == i.Promising) && (ideasFilter.Implemented == null ? true : ideasFilter.Implemented == i.Implemented) && (!ideasFilter.MyIdeas ? true : i.Authors.FirstOrDefault(a => a.Author1Navigation.User.UserName == person.User.UserName)!=null))).ToList().Where(i => TagsFilter(i, ideasFilter.RequiredTags, ideasFilter.OptionalTags)))
+{
+    <div class="card border-dark mb-1">
+        <div class="card-header">
+            <h5 class="card-title">@idea?.Title</h5>
+        </div>
+        <div class="card-body">
+            <p class="card-text">@idea?.Annotation</p>
+        </div>
+        <div class="card-footer text-muted">
+            <button class="btn btn-outline-dark" data-rel="@idea?.Id" @onclick="(e)=>openBindModal(idea.Id)" data-bs-toggle="modal" data-bs-target="#editModal" title="Просмотр/редактирование"><i class="bi bi-pencil-fill"></i></button>
+            <button class="btn btn-outline-dark" data-rel="@idea?.Id" @onclick="(e)=>likeIdea(1,idea,person)" title="Лайкнуть"><i class="bi bi-hand-thumbs-up-fill text-success"></i></button>
+            <button class="btn btn-outline-dark" data-rel="@idea?.Id" @onclick="(e)=>likeIdea(-1,idea,person)" title="Дизлайкнуть"><i class="bi bi-hand-thumbs-down-fill text-danger"></i></button>
+            <button class="btn btn-outline-dark" data-rel="@idea?.Id" @onclick="(e)=>openBindModal(idea.Id)" data-bs-toggle="modal" data-bs-target="#chatModal" title="Чат по этой идее"><i class="bi bi-chat-left-dots"></i></button>
+        </div>
+    </div>
+}
+
+<!-- Модальное окно -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">@idea?.Title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p>@idea.Annotation</p>
+                <p>@idea.Description</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div class="modal fade" id="appendModal" tabindex="-1" aria-labelledby="appendModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="appendModalLabel">Добавьте свою идею</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p>@idea?.Title</p>
+                <p>@idea?.Annotation</p>
+                <p>@idea?.Description</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div class="modal fade" id="chatModal" tabindex="-1" aria-labelledby="chatModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chatModalLabel">@idea?.Title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" style="overflow-x: hidden;">
+                <div id="scrollbox">
+                    @foreach (var item in messages.Reverse<Message>())
+                    {
+                        <div class="@item.CSS">
+                            <div class="user">@item.Username</div>
+                            <div class="msg">@item.Body</div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer" style="flex-wrap:nowrap">
+                <textarea id="message" class="input-sm" placeholder="введите свой комментарий" @bind="@messageInput"></textarea>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" @onclick="@(() => SendAsync(messageInput))">Отправить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@*<div class="offcanvas @FilterCssClass offcanvas-start" style="visibility:@FilterStyle" tabindex="-1" id="offcanvasFilter" aria-labelledby="offcanvasFilter">*@
+<div class="offcanvas offcanvas-start text-bg-light" tabindex="-1" id="offcanvasFilter" aria-labelledby="offcanvasFilter" style="visibility:initial">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="offcanvasFilterLabel">
+            <strong>Фильтр ленты идей</strong>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
+    </div>
+    <div class="offcanvas-body">
+        <EditForm Model="@ideasFilter" OnValidSubmit="@HandleFilter">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-floating mb-1">
+                <select class="form-select" id="floatingSelect" @bind="ideasFilter.Category">
+                    <option value="">Любая категория</option>
+                    @foreach (var item in (new Models.PlatformData()).Categories.Include(c => c.InverseSeniorNavigation).Where(c => c.Senior == null && c.InverseSeniorNavigation.Count>0))
+                    {
+                        <optgroup label="@item.Title">
+                            @foreach (var slave in item.InverseSeniorNavigation)
+                                if (slave.Id == categoryId)
+                                {
+                                    <option value="@slave.Id" selected>@slave.Title</option>
+                                }
+                                else
+                                {
+                                    <option value="@slave.Id">@slave.Title</option>
+                                }
+                        </optgroup>
+                    }
+                </select>
+                <label for="floatingSelect">Выбор категории</label>
+            </div>
+
+            <div class="form-floating mb-1">
+                <InputTextArea id="RequiredTags" @bind-Value="ideasFilter.RequiredTags" class="form-control" />
+                <label for="RequiredTags">обязательные теги</label>
+            </div>
+
+            <div class="form-floating mb-1">
+                <InputTextArea id="OptionalTags" @bind-Value="ideasFilter.OptionalTags" class="form-control" />
+                <label for="OptionalTags">необязательные теги</label>
+            </div>
+
+            <div class="form-check">
+                <InputCheckbox id="Moderation" class="form-check-input" @bind-Value="ideasFilter.Moderation" />
+                <label class="form-check-label" for="Moderation">Модерация успешная</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="Innovative" class="form-check-input" @bind-Value="ideasFilter.Innovative" />
+                <label class="form-check-label" for="Innovative">Инновационные идеи</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="Promising" class="form-check-input" @bind-Value="ideasFilter.Promising" />
+                <label class="form-check-label" for="Promising">Перспективные идеи</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="Implemented" class="form-check-input" @bind-Value="ideasFilter.Implemented" />
+                <label class="form-check-label" for="Implemented">Реализуемые идеи</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="MyIdeas" class="form-check-input" @bind-Value="ideasFilter.MyIdeas" />
+                <label class="form-check-label" for="MyIdeas">Мои идеи</label>
+                <a href="#" class="btn btn-link  btn-sm" data-bs-toggle="modal" data-bs-target="#appendModal"><i class="bi bi-plus-square-fill"></i> Добавить мою идею</a>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel-fill"></i> Применить фильтр</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    public Task<AuthenticationState> authenticationStateTask { get; set; }
+    [Inject]
+    NavigationManager navigation { get; set; }
+    private bool collapseFilter = true;
+
+    [Parameter]
+    public string? FilterCssClass { get; set; }
+    [Parameter]
+    public static string? location { get; set; } = "";
+    [Parameter]
+    public static int? categoryId { get; set; }
+
+
+    [Parameter]
+    public Models.Person? person { get; set; }
+    [Parameter]
+    public Models.PlatformData db { get; set; } = new Models.PlatformData();
+    [Parameter]
+    public IQueryable<Models.Idea> ideas { get; set; }
+    [Parameter]
+    public Models.Idea idea { get; set; } = new Models.Idea();
+
+    [Inject]
+    UserManager<IdentityUser> userManager { get; set; }
+
+    public static IQueryable<Models.Category> categories;
+
+    private HubConnection hubConnection;
+    private List<Message> messages = new();
+    private string? userInput;
+    private string? messageInput;
+
+    private class Message
+    {
+        public Message(string username, string body, bool mine)
+        {
+            Username = username;
+            Body = body;
+            Mine = mine;
+        }
+
+        public string Username { get; set; }
+        public string Body { get; set; }
+        public bool Mine { get; set; }
+
+        public bool IsNotice => Body.StartsWith("[Notice]");
+
+        public string CSS => Mine ? "sent" : "received";
+    }
+
+    public class IdeasFilter
+    {
+        public int? Category { get; set; }
+        public string? RequiredTags { get; set; }
+        public string? OptionalTags { get; set; }
+        public bool Moderation { get; set; } = true;
+        public bool Innovative { get; set; } = true;
+        public bool Promising { get; set; } = true;
+        public bool Implemented { get; set; } = true;
+        public bool MyIdeas { get; set; } = false;
+    }
+
+    private IdeasFilter ideasFilter = new();
+
+    private void HandleFilter()
+    {
+        categoryId = ideasFilter.Category;
+        StateHasChanged();
+    }
+
+    private void likeIdea(int sign, Models.Idea idea, Models.Person person)
+    {
+        var db = new Models.PlatformData();
+        idea = db.Ideas.SingleOrDefault(i => i.Id == idea.Id);
+        person = db.People.SingleOrDefault(p => p.Id == person.Id);
+        const int la = 10; // плечо (рычага)
+        Int64 plus = idea.Plus;
+        Int64 minus = idea.Minus;
+        if (sign < 0)
+        {
+            idea.Minus++;
+            if (minus >= plus) person.Rating++;
+            else person.Rating--;
+            idea.Rating -= person.Rating / la;
+        }
+        if (sign > 0)
+        {
+            idea.Plus++;
+            if (plus >= minus) person.Rating++;
+            else person.Rating--;
+            idea.Rating += person.Rating / la;
+        }
+        db.SaveChanges();
+    }
+
+    private bool TagsFilter(Models.Idea item, string requiredTags, string optionalTags) 
+    {
+        List<string>? rt = null;
+        List<string>? ot = null;
+        if (!string.IsNullOrWhiteSpace(requiredTags)) rt = requiredTags.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (!string.IsNullOrWhiteSpace(optionalTags)) ot = optionalTags.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (rt == null && ot == null)
+            return true;
+        else
+        {
+            bool res = true;
+            if (rt != null) foreach (var r in rt) if (!((item.Tags?.ToUpper().Contains(r) ?? false) || (item.Title?.ToUpper().Contains(r) ?? false) || (item.Annotation?.ToUpper().Contains(r) ?? false) || (item.Description?.ToUpper().Contains(r) ?? false))) return false;
+            if (ot != null)
+            {
+                res = false;
+                foreach (var r in ot) res = res || ((item.Tags?.ToUpper().Contains(r) ?? false) || (item.Title?.ToUpper().Contains(r) ?? false) || (item.Annotation?.ToUpper().Contains(r) ?? false) || (item.Description?.ToUpper().Contains(r) ?? false));
+            }
+            return res;
+        }
+    }
+
+    private void GetCategory(ChangeEventArgs eventArgs)
+    {
+        if (string.IsNullOrWhiteSpace(eventArgs.Value.ToString())) categoryId = null;
+        else categoryId = int.Parse(eventArgs.Value.ToString());
+        ideas = db.Ideas.Where(i => categoryId == null ? true : i.Category == categoryId);
+        idea = ideas.First();
+        navigation.NavigateTo(navigation.Uri.Split('/').Last(), true);
+        StateHasChanged();
+    }
+
+    private void OnIdeasFilter(EventArgs eventArgs)
+    {
+        //StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await authenticationStateTask).User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var currentUser = await userManager.GetUserAsync(user);
+            var currentUserId = currentUser.Id;
+            var currentUserEmail = currentUser.Email;
+            var currentUserPhone = currentUser.PhoneNumber;
+            var currentUserEmailConfirmed = currentUser.EmailConfirmed;
+
+            person = db.People.Include(p => p.Competencies).Include(p=>p.User).SingleOrDefault(p => p.UserId == currentUserId);
+            ideas = db.Ideas.Where(i => categoryId == null ? true : i.Category == categoryId);
+            idea = ideas.First();
+            categories = db.Categories.Include(c => c.InverseSeniorNavigation).Where(c => c.Senior == null);
+            location = navigation.Uri.Split('/').Last();
+            navigation.LocationChanged += (nm, l) =>
+            {
+                location = l.Location.Split('/').Last();
+            };
+
+            userInput = person.Nic;
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavManager.ToAbsoluteUri("/chathub"))
+                .Build();
+
+            hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+            {
+                messages.Add(new Message(user, message, user == person.Nic));
+                InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+        }
+        else
+        {
+            // User is not logged in
+        }
+    }
+
+    protected void openBindModal(int id)
+    {
+        idea = ideas.Single(i => i.Id == id);
+    }
+
+    private void BroadcastMessage(string name, string message)
+    {
+        bool isMine = name.Equals(userInput, StringComparison.OrdinalIgnoreCase);
+
+        messages.Add(new Message(name, message, isMine));
+
+        // Inform blazor the UI needs updating
+        StateHasChanged();
+    }
+
+    private async Task SendAsync(string message)
+    {
+        await hubConnection.SendAsync("Broadcast", userInput, messageInput);
+
+        messageInput = string.Empty;
+    }
+
+    public bool IsConnected =>
+        hubConnection.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

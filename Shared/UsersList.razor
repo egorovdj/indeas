@@ -1,0 +1,335 @@
+﻿@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AuthenticationStateProvider AStateProvider
+@inject NavigationManager NavManager
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+
+<h3 class="text-white">Список пользователей</h3>
+
+@foreach (var pers in (new Models.PlatformData()).People.Include(p=>p.Competencies).Where(p=>p.Moderation&&!p.Private).OrderByDescending(p=>p.Rating).ToList().Where(p=>TagsFilter(p,peopleFilter.Profession,peopleFilter.Specialist,peopleFilter.RequiredTags,peopleFilter.OptionalTags)))
+{
+    <div class="card border-dark mb-1">
+        <div class="card-header">
+            <h5 class="card-title">@($"{pers?.Nic} ({pers?.Name} {pers?.MiddleName} {pers?.Surname})")</h5>
+        </div>
+        <div class="card-body">
+            <p class="card-text">@pers?.AboutMe</p>
+            <p class="card-text">@pers?.Contacts</p>
+        </div>
+        <div class="card-footer text-muted">
+            <button class="btn btn-outline-dark" data-rel="@pers?.Id" @onclick="(e)=>openBindModal(pers.Id)" data-bs-toggle="modal" data-bs-target="#editModal" title="Просмотр/редактирование"><i class="bi bi-zoom-in"></i></button>
+            @if (pers?.UserId == currentUserId){
+                <button class="btn btn-outline-dark" disabled data-rel="@pers?.Id" title="Лайкнуть"><i class="bi bi-hand-thumbs-up-fill text-success"></i></button>
+                <button class="btn btn-outline-dark" disabled data-rel="@pers?.Id" title="Дизлайкнуть"><i class="bi bi-hand-thumbs-down-fill text-danger"></i></button>
+                <button class="btn btn-outline-dark" disabled data-rel="@pers?.Id" @onclick="(e)=>openBindModal(pers.Id)" data-bs-toggle="modal" data-bs-target="#chatModal" title="Чат с этим пользователем"><i class="bi bi-chat-left-dots"></i></button>
+            }
+            else {
+                <button class="btn btn-outline-dark" data-rel="@pers?.Id" @onclick="(e)=>likePerson(1,pers,person)" title="Лайкнуть"><i class="bi bi-hand-thumbs-up-fill text-success"></i></button>
+                <button class="btn btn-outline-dark" data-rel="@pers?.Id" @onclick="(e)=>likePerson(-1,pers,person)" title="Дизлайкнуть"><i class="bi bi-hand-thumbs-down-fill text-danger"></i></button>
+                <button class="btn btn-outline-dark" data-rel="@pers?.Id" @onclick="(e)=>openBindModal(pers.Id)" data-bs-toggle="modal" data-bs-target="#chatModal" title="Чат с этим пользователем"><i class="bi bi-chat-left-dots"></i></button>
+            }
+        </div>
+    </div>
+}
+
+<!-- Модальное окно -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">@($"{person?.Nic} ({person?.Name} {person?.MiddleName} {person?.Surname})")</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="card-text">@person?.AboutMe</p>
+                <p class="card-text">@person?.Contacts</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div class="modal fade" id="chatModal" tabindex="-1" aria-labelledby="chatModalLabel" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chatModalLabel">@($"{person?.Nic} ({person?.Name} {person?.MiddleName} {person?.Surname})")</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" style="overflow-x: hidden;">
+                <div id="scrollbox">
+                    @foreach (var item in messages.Reverse<Message>())
+                    {
+                        <div class="@item.CSS">
+                            <div class="user">@item.Username</div>
+                            <div class="msg">@item.Body</div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer" style="flex-wrap:nowrap">
+                <textarea id="message" class="input-sm" placeholder="введите свой комментарий" @bind="@messageInput"></textarea>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" @onclick="@(() => SendAsync(messageInput))">Отправить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@*<div class="offcanvas @FilterCssClass offcanvas-start" style="visibility:@FilterStyle" tabindex="-1" id="offcanvasFilter" aria-labelledby="offcanvasFilter">*@
+<div class="offcanvas offcanvas-start text-bg-light" tabindex="-1" id="offcanvasFilter" aria-labelledby="offcanvasFilter" style="visibility:initial">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="offcanvasFilterLabel">
+            <strong>Фильтр списка людей</strong>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
+    </div>
+    <div class="offcanvas-body">
+        <EditForm Model="@peopleFilter" OnValidSubmit="@HandleFilter">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-floating mb-1">
+                <input id="Profession" @bind="peopleFilter.Profession" class="form-control" />
+                <label for="Profession">Профессия</label>
+            </div>
+
+            <div class="form-floating mb-1">
+                <input id="Specialist" @bind="peopleFilter.Specialist" class="form-control" />
+                <label for="Specialist">Специалист</label>
+            </div>
+
+            <div class="form-floating mb-1">
+                <InputTextArea id="RequiredTags" @bind-Value="peopleFilter.RequiredTags" class="form-control" />
+                <label for="RequiredTags">обязательные теги</label>
+            </div>
+
+            <div class="form-floating mb-1">
+                <InputTextArea id="OptionalTags" @bind-Value="peopleFilter.OptionalTags" class="form-control" />
+                <label for="OptionalTags">необязательные теги</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel-fill"></i> Применить фильтр</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    public Task<AuthenticationState> authenticationStateTask { get; set; }
+    [Inject]
+    NavigationManager navigation { get; set; }
+    private bool collapseFilter = true;
+
+    [Inject]
+    UserManager<IdentityUser> userManager { get; set; }
+
+    public class PeopleFilter
+    {
+        public string? Profession { get; set; }
+        public string? Specialist { get; set; }
+        public string? RequiredTags { get; set; }
+        public string? OptionalTags { get; set; }
+    }
+
+    private PeopleFilter peopleFilter = new();
+
+    private void HandleFilter()
+    {
+        StateHasChanged();
+    }
+
+    private HubConnection hubConnection;
+    private List<Message> messages = new();
+    private string? userInput;
+    private string? messageInput;
+
+    private class Message
+    {
+        public Message(string username, string body, bool mine)
+        {
+            Username = username;
+            Body = body;
+            Mine = mine;
+        }
+
+        public string Username { get; set; }
+        public string Body { get; set; }
+        public bool Mine { get; set; }
+
+        public bool IsNotice => Body.StartsWith("[Notice]");
+
+        public string CSS => Mine ? "sent" : "received";
+    }
+
+    [Parameter]
+    public Models.PlatformData db { get; set; } = new Models.PlatformData();
+    [Parameter]
+    public IQueryable<Models.Person> people { get; set; }
+    [Parameter]
+    public Models.Person person { get; set; } = new();
+    [Parameter]
+    public static string? location { get; set; } = "";
+    [Parameter]
+    public static string? currentUserId { get; set; } = "";
+    [Parameter]
+    public static string? currentUserNic { get; set; } = "";
+
+    protected void openBindModal(int id)
+    {
+        person = people.Single(i => i.Id == id);
+        userInput = person.Nic;
+    }
+
+    private void likePerson(int sign, Models.Person pers, Models.Person person)
+    {
+        var db = new Models.PlatformData();
+        pers = db.People.SingleOrDefault(i => i.Id == pers.Id);
+        person = db.People.SingleOrDefault(p => p.Id == person.Id);
+        const int la = 10; // плечо (рычага)
+        Int64 plus = pers.Plus;
+        Int64 minus = pers.Minus;
+        if (sign < 0)
+        {
+            pers.Minus++;
+            if (minus >= plus) person.Rating++;
+            else person.Rating--;
+            pers.Rating -= person.Rating / la;
+        }
+        if (sign > 0)
+        {
+            pers.Plus++;
+            if (plus >= minus) person.Rating++;
+            else person.Rating--;
+            pers.Rating += person.Rating / la;
+        }
+        db.SaveChanges();
+    }
+
+    private bool TagsFilter(Models.Person item, string Profession, string Specialist, string requiredTags, string optionalTags)
+    {
+        List<string>? pf = null;
+        List<string>? sp = null;
+        List<string>? rt = null;
+        List<string>? ot = null;
+        if (!string.IsNullOrWhiteSpace(Profession)) pf = Profession.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (!string.IsNullOrWhiteSpace(Specialist)) sp = Specialist.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (!string.IsNullOrWhiteSpace(requiredTags)) rt = requiredTags.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (!string.IsNullOrWhiteSpace(optionalTags)) ot = optionalTags.ToUpper().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (pf == null && sp == null && rt == null && ot == null)
+            return true;
+        else
+        {
+            if(item.Id==2||item.Id==3){
+
+            }
+            bool resMain = true;
+            {
+                bool res = true;
+                bool res1 = false;
+                if (rt != null) foreach (var r in rt) if (!((item.Tags?.ToUpper().Contains(r) ?? false) || (item.AboutMe?.ToUpper().Contains(r) ?? false))) { res = false; break; }
+                if (ot != null)
+                {
+                    foreach (var r in ot) res1 = res1 || ((item.Tags?.ToUpper().Contains(r) ?? false) || (item.AboutMe?.ToUpper().Contains(r) ?? false));
+                }
+                else res1 = true;
+                res = res && res1;
+                resMain = resMain && res;
+            }
+            {
+                bool res = false;
+                bool res1 = false;
+                foreach (var it in item.Competencies)
+                {
+                    res = true;
+                    res1 = false;
+                    if (rt != null) foreach (var r in rt) if (!((it.Tags?.ToUpper().Contains(r) ?? false))) { res = false; break; }
+                    if (ot != null)
+                    {
+                        foreach (var r in ot) res1 = res1 || ((it.Tags?.ToUpper().Contains(r) ?? false));
+                    }
+                    else res1 = true;
+                    res = res && res1;
+                    if (res) break;
+                }
+                resMain = resMain || res;
+            }
+            return resMain;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await authenticationStateTask).User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var currentUser = await userManager.GetUserAsync(user);
+            currentUserId = currentUser.Id;
+            var currentUserEmail = currentUser.Email;
+            var currentUserPhone = currentUser.PhoneNumber;
+            var currentUserEmailConfirmed = currentUser.EmailConfirmed;
+
+            people = db.People.Include(p => p.Competencies).Include(p => p.User);
+            person = people.SingleOrDefault(p => p.UserId == currentUserId);
+            currentUserNic = person.Nic;
+            location = navigation.Uri.Split('/').Last();
+            navigation.LocationChanged += (nm, l) =>
+            {
+                location = l.Location.Split('/').Last();
+            };
+
+            userInput = person.Nic;
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavManager.ToAbsoluteUri("/chathub"))
+                .Build();
+
+            hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+            {
+                messages.Add(new Message(user, message, user == person.Nic));
+                InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+        }
+        else
+        {
+            // User is not logged in
+        }
+    }
+
+    private void BroadcastMessage(string name, string message)
+    {
+        bool isMine = name.Equals(userInput, StringComparison.OrdinalIgnoreCase);
+
+        messages.Add(new Message(name, message, isMine));
+
+        // Inform blazor the UI needs updating
+        StateHasChanged();
+    }
+
+    private async Task SendAsync(string message)
+    {
+        await hubConnection.SendAsync("Broadcast", userInput, messageInput);
+
+        messageInput = string.Empty;
+    }
+
+    public bool IsConnected =>
+        hubConnection.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

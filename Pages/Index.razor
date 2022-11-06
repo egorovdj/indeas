@@ -1,0 +1,77 @@
+﻿@page "/"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AuthenticationStateProvider AStateProvider
+
+<PageTitle>Главная</PageTitle>
+
+<h1 class="text-white">
+    Интерактивная платформа для реализации инновационных идей
+</h1>
+
+<AuthorizeView>
+    <Authorized>
+        @if(person==null) {
+            <p class="lead text-white">@context.User.Identity.Name Вы не заполнили свой <a class="text-white" href="/Identity/Account/Manage/ProfileData">профиль</a>, поэтому не сможете оценивать <a class="text-white" href="ideas">идеии</a> и <a class="text-white" href="people">людей</a> на этой платформе.</p>
+        }
+        else {
+            <p class="lead text-white">@(person.Nic == null ? context.User.Identity.Name : person.Nic) добро пожаловать на платформу! Смотрите и реагируйте на <a class="text-white" href="ideas">идеии</a> и <a class="text-white" href="people">людей</a>.</p>
+            if (person.Competencies.Count == 0)
+            {
+                <p class="lead text-white">Вы не указали свои <a class="text-white" href="/Identity/Account/Manage/ProfileData">компетенции</a>, поэтому не сможете претендовать на участие в командах.</p>
+            }
+            if (person.Private)
+            {
+                <p class="lead text-white">Вы указали приватность своего <a class="text-white" href="/Identity/Account/Manage/ProfileData">профиля</a>, поэтому не сможете общаться и оценивать <a class="text-white" href="ideas">идеии</a> и <a class="text-white" href="people">людей</a> на этой платформе. Хотя никто не сможет посмотреть Ваш профиль!</p>
+            }
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p class="lead text-white">Это платформа служит для публикации <a class="text-white" href="ideas">идей</a>, обмена мнениями о них. Встреч <a class="text-white" href="people">людей</a> для подбора команд или рецензирования идей. Помощи в реализации идей. В целом воронка идей, как на этом фото Москвы.</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationStateTask { get; set; }
+
+    [Parameter]
+    public Models.Person? person { get; set; }
+
+    [Inject]
+    UserManager<IdentityUser> userManager { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await authenticationStateTask).User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var currentUser = await userManager.GetUserAsync(user);
+            var currentUserId = currentUser.Id;
+            var currentUserEmail = currentUser.Email;
+            var currentUserPhone = currentUser.PhoneNumber;
+            var currentUserEmailConfirmed = currentUser.EmailConfirmed;
+            Models.PlatformData db = new Models.PlatformData();
+            person = db.People.Include(p => p.Competencies).SingleOrDefault(p => p.UserId == currentUserId);
+        }
+        else
+        {
+            // User is not logged in
+        }
+    }
+
+    private async Task<bool> GetIsAuthenticated()
+    {
+        bool sw = false;
+        ClaimsPrincipal? user = null;
+
+        var authState = await AStateProvider.GetAuthenticationStateAsync();
+        user = authState.User;
+        sw = user.Identity.IsAuthenticated;
+        //StateHasChanged();
+        return sw;
+    }
+}
